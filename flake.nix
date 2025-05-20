@@ -34,6 +34,12 @@
             })
           ];
         };
+        hexa = pkgs.writeShellScriptBin "hexa" ''
+          hexyl ./saves/AAAAAAA.sav $@
+        '';
+        hexb = pkgs.writeShellScriptBin "hexb" ''
+          hexyl ./saves/BBBBBBB.sav $@
+        '';
       in
       {
         packages.default = pkgs.callPackage ./default.nix { inherit zigPackage; };
@@ -45,6 +51,11 @@
           ];
           packages = with pkgs; [
             raylib
+
+            # for save dumps
+            hexyl
+            hexa
+            hexb
           ];
 
           shellHook = ''
