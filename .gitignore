@@ -1,0 +1,10 @@
+# Nix build
+result
+# make build
+build
+
+.vscode/
+.DS_Store
+zig-*/
+.zig-*/
+NUL
