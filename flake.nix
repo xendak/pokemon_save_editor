@@ -35,10 +35,10 @@
           ];
         };
         hexa = pkgs.writeShellScriptBin "hexa" ''
-          hexyl ./saves/AAAAAAA.sav $@
+          hexyl $PROJECT_ROOT/saves/AAAAAAA.sav $@
         '';
         hexb = pkgs.writeShellScriptBin "hexb" ''
-          hexyl ./saves/BBBBBBB.sav $@
+          hexyl $PROJECT_ROOT/saves/BBBBBBB.sav $@
         '';
       in
       {
@@ -59,6 +59,7 @@
           ];
 
           shellHook = ''
+            export PROJECT_ROOT=$(pwd)
             if [ -f ./init.sh ]; then
               echo "Initializing project..."
               chmod +x ./init.sh
