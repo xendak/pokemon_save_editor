@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    // const target = b.standardTargetOptions(.{});
+    const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     const windows = b.option(bool, "windows", "Target Microsoft Windows") orelse false;
@@ -11,22 +11,23 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .optimize = optimize,
 
-        .target = b.resolveTargetQuery(.{
-            .os_tag = if (windows) .windows else .linux,
-        }),
+        .target = if (windows) b.resolveTargetQuery(.{
+            .os_tag = .windows,
+        }) else target,
     });
 
     if (windows) {
-        exe.addIncludePath(b.path("./raylib/include"));
-        exe.addLibraryPath(b.path("./raylib/lib"));
-        b.installBinFile("./raylib/lib/raylib.dll", "raylib.dll");
-
-        exe.linkSystemLibrary("raylib");
-        exe.linkLibC();
-    } else {
-        exe.linkSystemLibrary("raylib");
-        exe.linkLibC();
+        exe.addIncludePath(b.path("./raylib/windows/include"));
+        exe.addLibraryPath(b.path("./raylib/windows/lib"));
+        b.installBinFile("./raylib/windows/lib/raylib.dll", "raylib.dll");
+        // } else {
+        // exe.addIncludePath(b.path("./raylib/linux/include"));
+        // exe.addLibraryPath(b.path("./raylib/linux/lib"));
+        // b.installBinFile("./raylib/linux/lib/libraylib.a", "libraylib.a");
     }
+
+    exe.linkSystemLibrary("raylib");
+    exe.linkLibC();
 
     // exe.setTarget(target);
 
@@ -38,9 +39,7 @@ pub fn build(b: *std.Build) void {
     const run_exe = b.addRunArtifact(exe);
 
     // idk why i need this? it should be doing this by default.
-    if (windows) {
-        run_exe.setCwd(b.path("zig-out/bin/"));
-    }
+    run_exe.setCwd(b.path("zig-out/bin/"));
 
     const run_step = b.step("run", "Run the application");
     run_step.dependOn(&run_exe.step);
