@@ -90,11 +90,11 @@ const SaveBlock = struct {
     }
 };
 
-fn get_checksum(buffer: []u8) u16 {
+fn get_checksum(buffer: []u8, offset: u32) u16 {
     var high: u8 = 0xff;
     var low: u8 = 0xff;
     // TODO: fix footer address to be less magic.
-    const data: []u8 = buffer[0..0xf618];
+    const data: []u8 = buffer[offset .. offset + 0xf618];
     for (data) |byte| {
         var x = byte ^ high;
         x ^= (x >> 4);
@@ -111,7 +111,7 @@ const block_detection = enum {
 };
 
 fn get_current_save_block(buffer: []u8) block_detection {
-    const offset = 0xf618 + 0x04;
+    const offset = 0xf618;
     const offset2 = offset + 0x40000;
     const footer1: u32 = std.mem.readInt(u32, buffer[offset .. offset + 4], .little);
     const footer2: u32 = std.mem.readInt(u32, buffer[offset2 .. offset2 + 4], .little);
@@ -151,7 +151,7 @@ pub fn main() anyerror!void {
     var save_dir = try fs.cwd().openDir(dir_path, .{});
     defer save_dir.close();
 
-    const save_file: fs.File = try save_dir.openFile("AAAAAAA.sav", .{});
+    const save_file: fs.File = try save_dir.openFile("changed.sav", .{});
     defer save_file.close();
 
     // 7x letters for name (0, 1)  + Sentinel + u16 Trainer ID + u16 Secret ID
@@ -162,8 +162,16 @@ pub fn main() anyerror!void {
     _ = try save_file.read(&buffer);
     // TODO: error handling
 
+    const current_block = get_current_save_block(&buffer);
+    const offset: u32 = switch (current_block) {
+        block_detection.FIRST => 0x0,
+        block_detection.SECOND => 0x40000,
+        block_detection.SAME => 0x0,
+    };
+    print("SaveBlock: 0x{x:0>6}:{}\n", .{ offset, current_block });
+
     // TODO: create a save_offset structure
-    const t_f = 0x64;
+    const t_f: usize = @intCast(offset + 0x64);
     var save_block = SaveBlock{
         .name = blk: {
             var name: [8]u16 = undefined;
@@ -174,9 +182,9 @@ pub fn main() anyerror!void {
             }
             break :blk name;
         },
-        .trainer_id = std.mem.readInt(u16, buffer[t_f + 16 .. t_f + 18], .little),
-        .secret_id = std.mem.readInt(u16, buffer[t_f + 18 .. t_f + 20], .little),
-        .money = std.mem.readInt(u32, buffer[t_f + 20 .. t_f + 24], .little),
+        .trainer_id = std.mem.readInt(u16, buffer[t_f + 16 ..][0..2], .little),
+        .secret_id = std.mem.readInt(u16, buffer[t_f + 18 ..][0..2], .little),
+        .money = std.mem.readInt(u32, buffer[t_f + 20 ..][0..4], .little),
         .gender = buffer[t_f + 24],
         .language = buffer[t_f + 25],
         .badges = buffer[t_f + 26],
@@ -185,8 +193,8 @@ pub fn main() anyerror!void {
         .game_clear = buffer[t_f + 29],
         .national_dex = buffer[t_f + 30],
         .dummy_chunk = buffer[t_f + 31],
-        .coins = std.mem.readInt(u16, buffer[t_f + 32 .. t_f + 34], .little),
-        .hours = std.mem.readInt(u16, buffer[t_f + 34 .. t_f + 36], .little),
+        .coins = std.mem.readInt(u16, buffer[t_f + 32 ..][0..2], .little),
+        .hours = std.mem.readInt(u16, buffer[t_f + 34 ..][0..2], .little),
         .minutes = buffer[t_f + 36],
         .seconds = buffer[t_f + 37],
     };
@@ -194,10 +202,11 @@ pub fn main() anyerror!void {
     // // "AAAABAAA"
     // save_block.name[4] = save_block.name[4] + 1;
 
-    const checksum: u16 = std.mem.readInt(u16, buffer[0xf626..0xf628], .little);
+    const checksum: u16 = std.mem.readInt(u16, buffer[offset + 0xf626 ..][0..2], .little);
     // Check if checksum will match the change
     // buffer[0x6C] = buffer[0x6C] + 1;
-    const simulated_checksum: u16 = get_checksum(&buffer);
+    buffer[0x40088] = 0x03;
+    const simulated_checksum: u16 = get_checksum(&buffer, offset);
 
     const p_name = try save_block.get_name_c_string(arena.allocator());
     defer arena.allocator().free(p_name);
@@ -218,7 +227,6 @@ pub fn main() anyerror!void {
     print("Simulated Crc   :\t{}:0x{x:0>4}\n", .{ simulated_checksum, simulated_checksum });
 
     print("\n\ndata: {*}\n", .{&buffer});
-    print("\n\nsaveblock: {}\n", .{get_current_save_block(&buffer)});
 
     print("\n", .{});
 
