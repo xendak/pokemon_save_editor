@@ -40,7 +40,10 @@ pub fn build(b: *std.Build) void {
 
     // idk why i need this? it should be doing this by default.
     run_exe.setCwd(b.path("zig-out/bin/"));
-
+    if (b.args) |args| {
+        run_exe.addArgs(args);
+    }
     const run_step = b.step("run", "Run the application");
+
     run_step.dependOn(&run_exe.step);
 }

@@ -26,16 +26,20 @@ const SaveBlock = struct {
     money: u32,
     gender: u8,
     language: u8,
-    badges: u8,
+    johto_badges: u8,
     sprite: u8,
     version: u8,
     game_clear: u8,
     national_dex: u8,
-    dummy_chunk: u8,
+    kanto_badges: u8,
     coins: u16,
     hours: u16,
     minutes: u8,
     seconds: u8,
+
+    // tentative
+    x: u8,
+    y: u8,
 
     fn get_gender(self: @This()) [:0]const u8 {
         const name =
@@ -88,6 +92,13 @@ const SaveBlock = struct {
 
         return result;
     }
+
+    fn get_johto_badges(self: @This()) u8 {
+        return @popCount(self.johto_badges);
+    }
+    fn get_kanto_badges(self: @This()) u8 {
+        return @popCount(self.kanto_badges);
+    }
 };
 
 fn get_checksum(buffer: []u8, offset: u32) u16 {
@@ -115,43 +126,67 @@ fn get_current_save_block(buffer: []u8) block_detection {
     const offset2 = offset + 0x40000;
     const footer1: u32 = std.mem.readInt(u32, buffer[offset .. offset + 4], .little);
     const footer2: u32 = std.mem.readInt(u32, buffer[offset2 .. offset2 + 4], .little);
-    print("footer1:{}\t|\t0x{x:0>4}\n", .{ footer1, footer1 });
-    print("footer1:{}\t|\t0x{x:0>4}\n", .{ footer2, footer2 });
 
-    if (footer1 > footer2) return block_detection.FIRST;
-    if (footer2 > footer1) return block_detection.SECOND;
-    return block_detection.SAME;
+    if (footer1 > footer2) {
+        print("0x{x:0>4} ({}) > 0x{x:0>4} ({})\n", .{ footer1, footer1, footer2, footer2 });
+        return .FIRST;
+    }
+    if (footer2 > footer1) {
+        print("0x{x:0>4} ({}) < 0x{x:0>4} ({})\n", .{ footer1, footer1, footer2, footer2 });
+        return .SECOND;
+    }
+    print("0x{x:0>4} ({}) = 0x{x:0>4} ({})\n", .{ footer1, footer1, footer2, footer2 });
+    return .SAME;
 }
 
 pub fn main() anyerror!void {
     const project_root_c_string = std.c.getenv("PROJECT_ROOT") orelse ".";
     const project_root = std.mem.span(project_root_c_string);
 
-    var arena = std.heap.GeneralPurposeAllocator(std.heap.GeneralPurposeAllocatorConfig{
+    var gpa = std.heap.GeneralPurposeAllocator(std.heap.GeneralPurposeAllocatorConfig{
         .safety = true,
         .never_unmap = true,
         .retain_metadata = true,
         .verbose_log = false,
     }){};
     defer {
-        const check = arena.deinit();
+        const check = gpa.deinit();
         std.debug.print("\nGpa check = {any}\n", .{check});
     }
+    const allocator = gpa.allocator();
 
     // TODO: remove GPA on release
     // var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     // defer arena.deinit();
+    // const allocator = arena.allocator();
 
-    const dir_path = try std.fs.path.join(arena.allocator(), &[_][]const u8{
-        project_root,
-        "saves",
-    });
-    defer arena.allocator().free(dir_path);
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
+
+    var dir_path: []const u8 = undefined;
+    defer if (args.len <= 1) allocator.free(dir_path);
+
+    var file_name: []const u8 = undefined;
+
+    if (args.len > 1) {
+        dir_path = std.fs.path.dirname(args[1]) orelse ".";
+        file_name = std.fs.path.basename(args[1]);
+    } else {
+        dir_path = try std.fs.path.join(allocator, &[_][]const u8{
+            project_root,
+            "saves",
+        });
+
+        // const stdin = try std.io.getStdIn().reader().readUntilDelimiterAlloc(allocator, '\n', 4096);
+        file_name = "jp.sav";
+    }
+    print("PATH: {s}\n", .{dir_path});
+    print("NAME: {s}\n\n", .{file_name});
 
     var save_dir = try fs.cwd().openDir(dir_path, .{});
     defer save_dir.close();
 
-    const save_file: fs.File = try save_dir.openFile("changed.sav", .{});
+    const save_file: fs.File = try save_dir.openFile(file_name, .{});
     defer save_file.close();
 
     // 7x letters for name (0, 1)  + Sentinel + u16 Trainer ID + u16 Secret ID
@@ -168,7 +203,7 @@ pub fn main() anyerror!void {
         block_detection.SECOND => 0x40000,
         block_detection.SAME => 0x0,
     };
-    print("SaveBlock: 0x{x:0>6}:{}\n", .{ offset, current_block });
+    print("SaveBlock: {s}\nOffset: 0x{x:0>6}\n", .{ @tagName(current_block), offset });
 
     // TODO: create a save_offset structure
     const t_f: usize = @intCast(offset + 0x64);
@@ -187,16 +222,18 @@ pub fn main() anyerror!void {
         .money = std.mem.readInt(u32, buffer[t_f + 20 ..][0..4], .little),
         .gender = buffer[t_f + 24],
         .language = buffer[t_f + 25],
-        .badges = buffer[t_f + 26],
+        .johto_badges = buffer[t_f + 26],
         .sprite = buffer[t_f + 27],
         .version = buffer[t_f + 28],
         .game_clear = buffer[t_f + 29],
         .national_dex = buffer[t_f + 30],
-        .dummy_chunk = buffer[t_f + 31],
+        .kanto_badges = buffer[t_f + 31],
         .coins = std.mem.readInt(u16, buffer[t_f + 32 ..][0..2], .little),
         .hours = std.mem.readInt(u16, buffer[t_f + 34 ..][0..2], .little),
         .minutes = buffer[t_f + 36],
         .seconds = buffer[t_f + 37],
+        .x = buffer[offset + 0x123C],
+        .y = buffer[offset + 0x1240],
     };
 
     // // "AAAABAAA"
@@ -208,8 +245,8 @@ pub fn main() anyerror!void {
     // buffer[0x40088] = 0x03;
     const simulated_checksum: u16 = get_checksum(&buffer, offset);
 
-    const p_name = try save_block.get_name_c_string(arena.allocator());
-    defer arena.allocator().free(p_name);
+    const p_name = try save_block.get_name_c_string(allocator);
+    defer allocator.free(p_name);
     print("\n", .{});
     print("Name            :\t{s}\n", .{p_name});
     print("Array           :\t{u}\n", .{save_block.get_name_array().letters});
@@ -218,15 +255,21 @@ pub fn main() anyerror!void {
     print("Money           :\t{}:\t0x{x:0>8}\n", .{ save_block.money, save_block.money });
     print("Gender          :\t{s}:\t0x{x:0>2}\n", .{ save_block.get_gender(), save_block.gender });
     print("Language        :\t{s}:\t0x{x:0>2}\n", .{ save_block.get_language(), save_block.language });
-    print("Badges          :\t{}:\t0x{x:0>2}\n", .{ save_block.badges, save_block.badges });
+    print("Badges          :\t{}:\t0x{x:0>2}\n", .{ save_block.get_johto_badges(), save_block.johto_badges });
+    print("Badges          :\t{}:\t0x{x:0>2}\n", .{ save_block.get_kanto_badges(), save_block.kanto_badges });
     print("Avatar          :\t{}:\t0x{x:0>2}\n", .{ save_block.sprite, save_block.sprite });
     print("Version         :\t{}:\t0x{x:0>2}\n", .{ save_block.version, save_block.version });
     print("Coins           :\t{}:\t0x{x:0>2}\n", .{ save_block.coins, save_block.coins });
     print("H:M:S           :\t{}:{}:{}|\t0x{x:0>2}\n", .{ save_block.hours, save_block.minutes, save_block.seconds, save_block.hours });
+
+    print("Coord X|Y:      :\t{}|{}\n", .{ save_block.x, save_block.y });
+
     print("Checksum        :\t{}:\t0x{x:0>4}\n", .{ checksum, checksum });
     print("New Checksum    :\t{}:\t0x{x:0>4}\n", .{ simulated_checksum, simulated_checksum });
 
     print("\n\ndata: {*}\n", .{&buffer});
+    print("Johto: {b}\t", .{save_block.johto_badges});
+    print("Kanto: {b}\n", .{save_block.kanto_badges});
 
     print("\n", .{});
 
