@@ -50,9 +50,9 @@ const SaveBlock = struct {
     fn get_language(self: @This()) [:0]const u8 {
         const language =
             switch (self.language) {
-                1 => "Japanese",
-                2 => "English",
-                else => "Undefined",
+                1 => "JP",
+                2 => "EN",
+                else => "ERR",
             };
         return language[0..];
     }
@@ -115,8 +115,8 @@ fn get_current_save_block(buffer: []u8) block_detection {
     const offset2 = offset + 0x40000;
     const footer1: u32 = std.mem.readInt(u32, buffer[offset .. offset + 4], .little);
     const footer2: u32 = std.mem.readInt(u32, buffer[offset2 .. offset2 + 4], .little);
-    print("footer1:{}\t|\t{x:0>4}\n", .{ footer1, footer1 });
-    print("footer1:{}\t|\t{x:0>4}\n", .{ footer2, footer2 });
+    print("footer1:{}\t|\t0x{x:0>4}\n", .{ footer1, footer1 });
+    print("footer1:{}\t|\t0x{x:0>4}\n", .{ footer2, footer2 });
 
     if (footer1 > footer2) return block_detection.FIRST;
     if (footer2 > footer1) return block_detection.SECOND;
@@ -205,7 +205,7 @@ pub fn main() anyerror!void {
     const checksum: u16 = std.mem.readInt(u16, buffer[offset + 0xf626 ..][0..2], .little);
     // Check if checksum will match the change
     // buffer[0x6C] = buffer[0x6C] + 1;
-    buffer[0x40088] = 0x03;
+    // buffer[0x40088] = 0x03;
     const simulated_checksum: u16 = get_checksum(&buffer, offset);
 
     const p_name = try save_block.get_name_c_string(arena.allocator());
@@ -213,18 +213,18 @@ pub fn main() anyerror!void {
     print("\n", .{});
     print("Name            :\t{s}\n", .{p_name});
     print("Array           :\t{u}\n", .{save_block.get_name_array().letters});
-    print("Trainer ID      :\t{}:0x{x}\n", .{ save_block.trainer_id, save_block.trainer_id });
-    print("Secret  ID      :\t{}:0x{x}\n", .{ save_block.secret_id, save_block.secret_id });
-    print("Money           :\t{}:0x{x:0>8}\n", .{ save_block.money, save_block.money });
-    print("Gender          :\t{s}:0x{x:0>2}\n", .{ save_block.get_gender(), save_block.gender });
-    print("Language        :\t{s}:0x{x:0>2}\n", .{ save_block.get_language(), save_block.language });
-    print("Badges          :\t{}:0x{x:0>2}\n", .{ save_block.badges, save_block.badges });
-    print("Avatar          :\t{}:0x{x:0>2}\n", .{ save_block.sprite, save_block.sprite });
-    print("Version         :\t{}:0x{x:0>2}\n", .{ save_block.version, save_block.version });
-    print("Coins           :\t{}:0x{x:0>2}\n", .{ save_block.coins, save_block.coins });
-    print("H:M:S           :\t{}:{}:{}|0x{x:0>2}\n", .{ save_block.hours, save_block.minutes, save_block.seconds, save_block.hours });
-    print("Checksum        :\t{}:0x{x:0>4}\n", .{ checksum, checksum });
-    print("Simulated Crc   :\t{}:0x{x:0>4}\n", .{ simulated_checksum, simulated_checksum });
+    print("Trainer ID      :\t{}:\t0x{x}\n", .{ save_block.trainer_id, save_block.trainer_id });
+    print("Secret  ID      :\t{}:\t0x{x}\n", .{ save_block.secret_id, save_block.secret_id });
+    print("Money           :\t{}:\t0x{x:0>8}\n", .{ save_block.money, save_block.money });
+    print("Gender          :\t{s}:\t0x{x:0>2}\n", .{ save_block.get_gender(), save_block.gender });
+    print("Language        :\t{s}:\t0x{x:0>2}\n", .{ save_block.get_language(), save_block.language });
+    print("Badges          :\t{}:\t0x{x:0>2}\n", .{ save_block.badges, save_block.badges });
+    print("Avatar          :\t{}:\t0x{x:0>2}\n", .{ save_block.sprite, save_block.sprite });
+    print("Version         :\t{}:\t0x{x:0>2}\n", .{ save_block.version, save_block.version });
+    print("Coins           :\t{}:\t0x{x:0>2}\n", .{ save_block.coins, save_block.coins });
+    print("H:M:S           :\t{}:{}:{}|\t0x{x:0>2}\n", .{ save_block.hours, save_block.minutes, save_block.seconds, save_block.hours });
+    print("Checksum        :\t{}:\t0x{x:0>4}\n", .{ checksum, checksum });
+    print("New Checksum    :\t{}:\t0x{x:0>4}\n", .{ simulated_checksum, simulated_checksum });
 
     print("\n\ndata: {*}\n", .{&buffer});
 

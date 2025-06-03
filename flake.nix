@@ -34,12 +34,12 @@
             })
           ];
         };
-        hexa = pkgs.writeShellScriptBin "hexa" ''
-          hexyl $PROJECT_ROOT/saves/AAAAAAA.sav $@
-        '';
-        hexb = pkgs.writeShellScriptBin "hexb" ''
-          hexyl $PROJECT_ROOT/saves/BBBBBBB.sav $@
-        '';
+        # hexa = pkgs.writeShellScriptBin "hexa" ''
+        #   hexyl $PROJECT_ROOT/saves/AAAAAAA.sav $@
+        # '';
+        # hexb = pkgs.writeShellScriptBin "hexb" ''
+        #   hexyl $PROJECT_ROOT/saves/BBBBBBB.sav $@
+        # '';
       in
       {
         packages.default = pkgs.callPackage ./default.nix { inherit zigPackage; };
@@ -53,10 +53,11 @@
             raylib
 
             # for save dumps
-            hexa
-            hexb
+            # hexa
+            # hexb
 
             # helper pkgs
+            imhex
             hexyl
             difftastic
             bitwise
