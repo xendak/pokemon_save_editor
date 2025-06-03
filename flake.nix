@@ -53,9 +53,14 @@
             raylib
 
             # for save dumps
-            hexyl
             hexa
             hexb
+
+            # helper pkgs
+            hexyl
+            difftastic
+            bitwise
+
           ];
 
           shellHook = ''

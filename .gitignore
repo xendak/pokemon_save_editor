@@ -7,4 +7,5 @@ build
 .DS_Store
 zig-*/
 .zig-*/
+hexdump/
 NUL
