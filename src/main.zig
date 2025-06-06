@@ -18,6 +18,28 @@ const print = std.debug.print;
 // Footer Size 0x10
 // Checksum(u16) => 0xf626
 
+const PokemonFlags = struct {
+    checksum_skip: u8,
+    bad_eg: u8,
+    unknown: u8,
+};
+
+const PF = union(enum) {
+    CHECKSUM_SKIP: u16,
+    BAD_EGG: u16,
+    UNKNOWN: u16,
+};
+
+const Pokemon = struct {
+    pv: u32,
+    flags: u16,
+    checksum: u16,
+};
+
+const PokemonParty = struct {
+    party: [6]Pokemon,
+};
+
 const SaveBlock = struct {
     // name: [8][2]u8, // 7 letters and a sentinel FF FF
     name: [8]u16,
@@ -44,6 +66,8 @@ const SaveBlock = struct {
 
     // pokemon
     party_size: u8,
+
+    party: PokemonParty,
 
     // tentative
     map: []const u8,
@@ -151,6 +175,12 @@ pub fn main() anyerror!void {
     const project_root_c_string = std.c.getenv("PROJECT_ROOT") orelse ".";
     const project_root = std.mem.span(project_root_c_string);
 
+    const T = 0b1110011;
+    const Z = T >> 2;
+    const Q = T >> 1 & 1;
+    const R = T >> 3;
+    print("\nbin: {}  = {b} {b} {b}\n\n\n\n", .{ T, Q, Z, R });
+
     var gpa = std.heap.GeneralPurposeAllocator(std.heap.GeneralPurposeAllocatorConfig{
         .safety = true,
         .never_unmap = true,
@@ -241,7 +271,10 @@ pub fn main() anyerror!void {
         .minutes = buffer[t_f + 36],
         .seconds = buffer[t_f + 37],
         .battle_points = std.mem.readInt(u16, buffer[offset + 0x5bb8 ..][0..2], .little),
+
         .party_size = buffer[t_f + 0x30],
+        .party = undefined,
+
         .x = buffer[offset + 0x123C],
         .y = buffer[offset + 0x1240],
         .map = "test",
