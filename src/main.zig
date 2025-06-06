@@ -24,20 +24,29 @@ const SaveBlock = struct {
     trainer_id: u16,
     secret_id: u16,
     money: u32,
+    coins: u16,
+    battle_points: u16,
     gender: u8,
-    language: u8,
-    johto_badges: u8,
     sprite: u8,
+
+    // game info
+    language: u8,
     version: u8,
     game_clear: u8,
-    national_dex: u8,
+
+    // global
+    johto_badges: u8,
     kanto_badges: u8,
-    coins: u16,
+    national_dex: u8,
     hours: u16,
     minutes: u8,
     seconds: u8,
 
+    // pokemon
+    party_size: u8,
+
     // tentative
+    map: []const u8,
     x: u8,
     y: u8,
 
@@ -62,11 +71,10 @@ const SaveBlock = struct {
     }
 
     fn get_name_array(self: @This()) struct { letters: [8:0]u21, len: usize } {
-        var res: [8:0]u21 = undefined;
+        var res: [8:0]u21 = [_:0]u21{0} ** 8;
         var len: usize = 0;
         for (self.name, 0..) |l, i| {
             res[i] = hex_table.hex_to_letter(l);
-            // print("0x{x}:\t{u}\n", .{ l, res[i] });
             len += 1;
             if (0xFFFF == l) break;
         }
@@ -232,8 +240,11 @@ pub fn main() anyerror!void {
         .hours = std.mem.readInt(u16, buffer[t_f + 34 ..][0..2], .little),
         .minutes = buffer[t_f + 36],
         .seconds = buffer[t_f + 37],
+        .battle_points = std.mem.readInt(u16, buffer[offset + 0x5bb8 ..][0..2], .little),
+        .party_size = buffer[t_f + 0x30],
         .x = buffer[offset + 0x123C],
         .y = buffer[offset + 0x1240],
+        .map = "test",
     };
 
     // // "AAAABAAA"
@@ -247,22 +258,26 @@ pub fn main() anyerror!void {
 
     const p_name = try save_block.get_name_c_string(allocator);
     defer allocator.free(p_name);
+    print("Language        :\t{s}:\t0x{x:0>2}\n", .{ save_block.get_language(), save_block.language });
     print("\n", .{});
     print("Name            :\t{s}\n", .{p_name});
     print("Array           :\t{u}\n", .{save_block.get_name_array().letters});
     print("Trainer ID      :\t{}:\t0x{x}\n", .{ save_block.trainer_id, save_block.trainer_id });
     print("Secret  ID      :\t{}:\t0x{x}\n", .{ save_block.secret_id, save_block.secret_id });
-    print("Money           :\t{}:\t0x{x:0>8}\n", .{ save_block.money, save_block.money });
     print("Gender          :\t{s}:\t0x{x:0>2}\n", .{ save_block.get_gender(), save_block.gender });
-    print("Language        :\t{s}:\t0x{x:0>2}\n", .{ save_block.get_language(), save_block.language });
-    print("Badges          :\t{}:\t0x{x:0>2}\n", .{ save_block.get_johto_badges(), save_block.johto_badges });
-    print("Badges          :\t{}:\t0x{x:0>2}\n", .{ save_block.get_kanto_badges(), save_block.kanto_badges });
+
+    print("Money           :\t{}:\t0x{x:0>8}\n", .{ save_block.money, save_block.money });
+    print("Coins           :\t{}:\t0x{x:0>2}\n", .{ save_block.coins, save_block.coins });
+    print("Battle Points   :\t{}:\t0x{x:0>2}\n", .{ save_block.battle_points, save_block.battle_points });
+    print("Party Size      :\t{}:\t0x{x:0>2}\n", .{ save_block.party_size, save_block.party_size });
+
+    print("Johto Badges    :\t{}:\t0x{x:0>2}\n", .{ save_block.get_johto_badges(), save_block.johto_badges });
+    print("Kanto Badges    :\t{}:\t0x{x:0>2}\n", .{ save_block.get_kanto_badges(), save_block.kanto_badges });
     print("Avatar          :\t{}:\t0x{x:0>2}\n", .{ save_block.sprite, save_block.sprite });
     print("Version         :\t{}:\t0x{x:0>2}\n", .{ save_block.version, save_block.version });
-    print("Coins           :\t{}:\t0x{x:0>2}\n", .{ save_block.coins, save_block.coins });
     print("H:M:S           :\t{}:{}:{}|\t0x{x:0>2}\n", .{ save_block.hours, save_block.minutes, save_block.seconds, save_block.hours });
 
-    print("Coord X|Y:      :\t{}|{}\n", .{ save_block.x, save_block.y });
+    print("Coord X,Y:      :\t{},{}\n", .{ save_block.x, save_block.y });
 
     print("Checksum        :\t{}:\t0x{x:0>4}\n", .{ checksum, checksum });
     print("New Checksum    :\t{}:\t0x{x:0>4}\n", .{ simulated_checksum, simulated_checksum });

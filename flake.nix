@@ -55,13 +55,6 @@
             # for save dumps
             # hexa
             # hexb
-
-            # helper pkgs
-            imhex
-            hexyl
-            difftastic
-            bitwise
-
           ];
 
           shellHook = ''
