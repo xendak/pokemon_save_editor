@@ -10,6 +10,7 @@ const fs = std.fs;
 const std = @import("std");
 const builtin = @import("builtin");
 const print = std.debug.print;
+const expect = std.testing.expectEqual;
 
 // Battle Points
 // 0x5bb8 u16
@@ -18,22 +19,122 @@ const print = std.debug.print;
 // Footer Size 0x10
 // Checksum(u16) => 0xf626
 
-const PokemonFlags = struct {
-    checksum_skip: u8,
-    bad_eg: u8,
-    unknown: u8,
+const EVs = struct {
+    hp: u8,
+    att: u8,
+    def: u8,
+    speed: u8,
+    sp_att: u8,
+    sp_def: u8,
 };
 
-const PF = union(enum) {
-    CHECKSUM_SKIP: u16,
-    BAD_EGG: u16,
-    UNKNOWN: u16,
+const ContestStats = struct {
+    cool: u8,
+    beauty: u8,
+    cute: u8,
+    smart: u8,
+    tough: u8,
+};
+
+const Block_A = struct {
+    sid: u16,
+    item: u16,
+    trainer_id: u16,
+    secret_id: u16,
+    exp: u32,
+    friendship: u8,
+    ability: u8,
+    mark: u8,
+    origin: u8,
+    ev: EVs,
+    contest_stats: ContestStats,
+
+    // Contest Score Modifier
+    sheen: u8,
+
+    ribbons: u32,
+};
+
+const PokemonMoves = struct {};
+const IVs = struct {};
+
+const Block_B = struct {
+    moves: [4]PokemonMoves,
+    pp: [4]u8,
+    pp_up: [4]u8,
+
+    // expand =>  0-29 = iv, 30 isEgg, 31 isNickname
+    iv: IVs,
+    ribbons: u32,
+
+    // expand => 0 fateful, 1 female, 2 gender unknown, 3-7 Forms( << 3)
+    flags: u8,
+    shiny_leaves: u8,
+    unknown: u8,
+
+    // tentative
+    egg_location: u16,
+    met_location: u16,
+};
+
+const Block_C = struct {
+    // 10 en, 5 jp/kr
+    // + sentinel
+    nickname: [11]u16,
+    unknown: u8,
+    game_origin: u8,
+    ribbons: u32,
+};
+
+const Block_D = struct {
+    trainer_name: [8]u16,
+    date_egg: u32,
+    date_met: u32,
+
+    //tentative
+    egg_location: u16,
+    met_location: u16,
+    pokerus: u8,
+    pokeball: u8,
+
+    // expand => 0-6 met level, 7 female OT gender??
+    flags: u8,
+    encounter_type: u8,
+
+    pokeball_tentative: u8,
+
+    walking_pokemon_mood: u8,
+};
+
+const BattleStats = struct {
+    // expand => 0-2 (asleep 0-7 rounds), 3 poison, 4 burn, 5 frozen, 6 paralyzed, 7 toxic
+    state: u8,
+    unknown_flags: u8,
+    unknown: u16,
+    level: u8,
+    // wtf is this
+    seals: u8,
+    hp: u16,
+    max_hp: u16,
+    att: u16,
+    def: u16,
+    speed: u16,
+    sp_att: u16,
+    sp_def: u16,
+
+    mail: [56]u8,
+    seal_cord: [24]u8,
 };
 
 const Pokemon = struct {
     pv: u32,
     flags: u16,
     checksum: u16,
+    a: Block_A,
+    b: Block_B,
+    c: Block_C,
+    d: Block_D,
+    battle_stats: BattleStats,
 };
 
 const PokemonParty = struct {
@@ -41,6 +142,8 @@ const PokemonParty = struct {
 };
 
 const SaveBlock = struct {
+    // 5 jp/kr ? TODO: convert into proper string, let me deal with converting
+    // back and forth in another class
     // name: [8][2]u8, // 7 letters and a sentinel FF FF
     name: [8]u16,
     trainer_id: u16,
