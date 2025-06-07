@@ -137,8 +137,136 @@ const Pokemon = struct {
     battle_stats: BattleStats,
 };
 
+fn read(comptime T: type, cursor: *[]const u8) T {
+    const size = @sizeOf(T);
+    const value = std.mem.readInt(T, cursor.*[0..size], .little);
+    cursor.* = cursor.*[size..];
+    return value;
+}
+fn skip(cursor: *[]const u8, skip_bytes: usize) void {
+    cursor.* = cursor.*[skip_bytes..];
+}
+
 const PokemonParty = struct {
     party: [6]Pokemon,
+
+    pub fn from_buffer(buffer: *[]const u8) PokemonParty {
+        // skip(buffer, offset);
+        const result: PokemonParty = .{ .party = undefined };
+        const pv = read(u32, buffer);
+        const flags = read(u16, buffer);
+        const checksum = read(u16, buffer);
+
+        // const a = read(u32, buffer);
+        // const b = read(u32, buffer);
+        // const c = read(u32, buffer);
+        // const d = read(u32, buffer);
+
+        var seed: u32 = checksum;
+        var shuffled_data: [128]u8 = undefined;
+        std.debug.assert(buffer.len > 128);
+        // decrypted[1] = data[0] & data[1]
+        // decrypted then goes from 0 -> 64
+        const decrypted = std.mem.bytesAsSlice(u16, &shuffled_data);
+
+        for (0..64) |i| {
+            // this will overflow, so we use zig wrapping methods to truncate to 32bit again
+            seed = 0x41C64E6D *% seed +% 0x00006073;
+            const key = @as(u16, @truncate(seed >> 16));
+
+            const encrypted = read(u16, buffer);
+            decrypted[i] = encrypted ^ key;
+
+            // std.mem.writeInt(u16, data[2 * i ..][0..2], decrypted, .little);
+        }
+
+        print("\npv: 0x{x:0>8}, checksum: 0x{x:0>4} | 0b{b:0>8}\n", .{ pv, checksum, flags });
+        const data = unshuffle(shuffled_data, pv);
+        var c: []const u8 = data[0..];
+        const sid = read(u16, &c);
+        print("{}\n", .{sid});
+
+        return result;
+    }
+};
+
+fn unshuffle(data: [128]u8, pv: u32) [128]u8 {
+    const shift = ((pv & 0x3E000) >> 0xD) % 24;
+
+    var blocks: [4][32]u8 = undefined;
+    for (0..4) |i| {
+        @memcpy(&blocks[i], data[i * 32 .. i * 32 + 32]);
+    }
+
+    const perm = INVERSE_PERMUTATION[@as(usize, @intCast(shift))];
+
+    var result: [128]u8 = undefined;
+    for (0..4) |i| {
+        const src_index = perm[i];
+        @memcpy(result[i * 32 .. i * 32 + 32], &blocks[src_index]);
+    }
+
+    return result;
+}
+
+fn parsePokemonData(data: *const [128]u8) struct { a: Block_A, b: Block_B, c: Block_C, d: Block_D } {
+    return .{
+        .a = @bitCast(data[0..32].*),
+        .b = @bitCast(data[32..64].*),
+        .c = @bitCast(data[64..96].*),
+        .d = @bitCast(data[96..128].*),
+    };
+}
+
+const INVERSE_PERMUTATION = [24][4]u8{
+    // Shift 00: ABCD -> ABCD
+    .{ 0, 1, 2, 3 },
+    // Shift 01: ABDC -> ABDC
+    .{ 0, 1, 3, 2 },
+    // Shift 02: ACBD -> ACBD
+    .{ 0, 2, 1, 3 },
+    // Shift 03: ACDB -> ADBC
+    .{ 0, 3, 1, 2 },
+    // Shift 04: ADBC -> ACDB
+    .{ 0, 2, 3, 1 },
+    // Shift 05: ADCB -> ADCB
+    .{ 0, 3, 2, 1 },
+    // Shift 06: BACD -> BACD
+    .{ 1, 0, 2, 3 },
+    // Shift 07: BADC -> BADC
+    .{ 1, 0, 3, 2 },
+    // Shift 08: BCAD -> CABD
+    .{ 2, 0, 1, 3 },
+    // Shift 09: BCDA -> DABC
+    .{ 3, 0, 1, 2 },
+    // Shift 10: BDAC -> CADB
+    .{ 2, 0, 3, 1 },
+    // Shift 11: BDCA -> DACB
+    .{ 3, 0, 2, 1 },
+    // Shift 12: CABD -> BCAD
+    .{ 1, 2, 0, 3 },
+    // Shift 13: CADB -> BDAC
+    .{ 1, 3, 0, 2 },
+    // Shift 14: CBAD -> CBAD
+    .{ 2, 1, 0, 3 },
+    // Shift 15: CBDA -> DBAC
+    .{ 3, 1, 0, 2 },
+    // Shift 16: CDAB -> CDAB
+    .{ 2, 1, 3, 0 },
+    // Shift 17: CDBA -> DCAB
+    .{ 3, 1, 2, 0 },
+    // Shift 18: DABC -> BCDA
+    .{ 1, 2, 3, 0 },
+    // Shift 19: DACB -> BDCA
+    .{ 1, 3, 2, 0 },
+    // Shift 20: DBAC -> CBDA
+    .{ 2, 3, 0, 1 },
+    // Shift 21: DBCA -> DBCA
+    .{ 3, 2, 0, 1 },
+    // Shift 22: DCAB -> CDBA
+    .{ 2, 3, 1, 0 },
+    // Shift 23: DCBA -> DCBA
+    .{ 3, 2, 1, 0 },
 };
 
 const SaveBlock = struct {
@@ -278,12 +406,6 @@ pub fn main() anyerror!void {
     const project_root_c_string = std.c.getenv("PROJECT_ROOT") orelse ".";
     const project_root = std.mem.span(project_root_c_string);
 
-    const T = 0b1110011;
-    const Z = T >> 2;
-    const Q = T >> 1 & 1;
-    const R = T >> 3;
-    print("\nbin: {}  = {b} {b} {b}\n\n\n\n", .{ T, Q, Z, R });
-
     var gpa = std.heap.GeneralPurposeAllocator(std.heap.GeneralPurposeAllocatorConfig{
         .safety = true,
         .never_unmap = true,
@@ -348,6 +470,9 @@ pub fn main() anyerror!void {
 
     // TODO: create a save_offset structure
     const t_f: usize = @intCast(offset + 0x64);
+
+    var party_block: []const u8 = buffer[t_f + 0x34 ..];
+
     var save_block = SaveBlock{
         .name = blk: {
             var name: [8]u16 = undefined;
@@ -376,7 +501,7 @@ pub fn main() anyerror!void {
         .battle_points = std.mem.readInt(u16, buffer[offset + 0x5bb8 ..][0..2], .little),
 
         .party_size = buffer[t_f + 0x30],
-        .party = undefined,
+        .party = PokemonParty.from_buffer(&party_block),
 
         .x = buffer[offset + 0x123C],
         .y = buffer[offset + 0x1240],
