@@ -182,9 +182,73 @@ const PokemonParty = struct {
 
         print("\npv: 0x{x:0>8}, checksum: 0x{x:0>4} | 0b{b:0>8}\n", .{ pv, checksum, flags });
         const data = unshuffle(shuffled_data, pv);
-        var c: []const u8 = data[0..];
-        const sid = read(u16, &c);
-        print("{}\n", .{sid});
+        var a: []const u8 = data[0..32];
+        // var b: []const u8 = data[32..64];
+        var c: []const u8 = data[64..96];
+        // var d: []const u8 = data[96..128];
+        const b_a = Block_A{
+            .sid = read(u16, &a),
+            .item = read(u16, &a),
+            .trainer_id = read(u16, &a),
+            .secret_id = read(u16, &a),
+            .exp = read(u32, &a),
+            .friendship = read(u8, &a),
+            .ability = read(u8, &a),
+            .mark = read(u8, &a),
+            .origin = read(u8, &a),
+            .ev = .{
+                .hp = read(u8, &a),
+                .att = read(u8, &a),
+                .def = read(u8, &a),
+                .speed = read(u8, &a),
+                .sp_att = read(u8, &a),
+                .sp_def = read(u8, &a),
+            },
+            .contest_stats = .{
+                .cool = read(u8, &a),
+                .beauty = read(u8, &a),
+                .cute = read(u8, &a),
+                .smart = read(u8, &a),
+                .tough = read(u8, &a),
+            },
+            .sheen = read(u8, &a),
+            .ribbons = read(u32, &a),
+        };
+        const nickname: [:0]u21 = blk: {
+            var name: [11]u21 = undefined;
+            inline for (0..11) |i| {
+                const code = read(u16, &c);
+                name[i] = hex_table.hex_to_letter(code);
+                if (code == 0xFFFF) {
+                    name[i] = 0;
+                    break :blk name[0..i :0];
+                }
+            }
+            break :blk name[0.. :0];
+        };
+
+        // comptime is fun
+        print("Block_A: \n", .{});
+        const fields = @typeInfo(@TypeOf(b_a)).@"struct".fields;
+        inline for (fields) |field| {
+            const value = @field(b_a, field.name);
+            const ti = @typeInfo(@TypeOf(value));
+            switch (ti) {
+                .@"struct" => {
+                    print("  {s}: [\n", .{field.name});
+                    defer print("  ]\n", .{});
+                    const nested_fields = ti.@"struct".fields;
+                    inline for (nested_fields) |nested_field| {
+                        const nested_value = @field(value, nested_field.name);
+                        print("    {s}: {any}\n", .{ nested_field.name, nested_value });
+                    }
+                },
+                else => print("  {s}: {any}\n", .{ field.name, value }),
+            }
+        }
+        print(":Block_A \n", .{});
+
+        print("\nNickname {u}\n", .{nickname});
 
         return result;
     }
