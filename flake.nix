@@ -52,6 +52,9 @@
           packages = with pkgs; [
             raylib
 
+            # i want to try :)
+            nushell
+
             # for save dumps
             # hexa
             # hexb
