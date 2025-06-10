@@ -19,7 +19,7 @@ const expect = std.testing.expectEqual;
 // Footer Size 0x10
 // Checksum(u16) => 0xf626
 
-const EVs = struct {
+const EVs = packed struct {
     hp: u8,
     att: u8,
     def: u8,
@@ -28,7 +28,7 @@ const EVs = struct {
     sp_def: u8,
 };
 
-const ContestStats = struct {
+const ContestStats = packed struct {
     cool: u8,
     beauty: u8,
     cute: u8,
@@ -36,7 +36,7 @@ const ContestStats = struct {
     tough: u8,
 };
 
-const Block_A = struct {
+const Block_A = packed struct {
     sid: u16,
     item: u16,
     trainer_id: u16,
@@ -51,20 +51,36 @@ const Block_A = struct {
 
     // Contest Score Modifier
     sheen: u8,
-
     ribbons: u32,
+
+    // Helper function for safe conversion
+    pub fn fromBytes(bytes: *const [32]u8) Block_A {
+        return @as(*const Block_A, @ptrCast(bytes)).*;
+    }
+
+    // Helper to convert back to bytes
+    pub fn toBytes(self: *const Block_A) [32]u8 {
+        return @as(*const [32]u8, @ptrCast(self)).*;
+    }
 };
 
-const PokemonMoves = struct {};
+const PokemonMoves = packed struct {
+    move_1: u8,
+    move_2: u8,
+    move_3: u8,
+    move_4: u8,
+};
 const IVs = struct {};
 
-const Block_B = struct {
-    moves: [4]PokemonMoves,
-    pp: [4]u8,
-    pp_up: [4]u8,
+const Block_B = packed struct {
+    // moves: [4]PokemonMoves,
+    moves: PokemonMoves,
+    pp: PokemonMoves,
+    pp_up: PokemonMoves,
 
     // expand =>  0-29 = iv, 30 isEgg, 31 isNickname
-    iv: IVs,
+    // iv: IVs,
+    iv: u32,
     ribbons: u32,
 
     // expand => 0 fateful, 1 female, 2 gender unknown, 3-7 Forms( << 3)
@@ -77,32 +93,32 @@ const Block_B = struct {
     met_location: u16,
 };
 
-const Block_C = struct {
+const Block_C = packed struct {
     // 10 en, 5 jp/kr
     // + sentinel
-    nickname: [11]u16,
+    nickname: @Vector(11, u16),
     unknown: u8,
     game_origin: u8,
     ribbons: u32,
+    unused: u32,
 };
 
-const Block_D = struct {
-    trainer_name: [8]u16,
+const Block_D = packed struct {
+    trainer_name: @Vector(8, u16),
     date_egg: u32,
     date_met: u32,
 
     //tentative
-    egg_location: u16,
-    met_location: u16,
+    dp_egg_location: u16,
+    dp_met_location: u16,
     pokerus: u8,
-    pokeball: u8,
+    dp_pokeball: u8,
 
     // expand => 0-6 met level, 7 female OT gender??
     flags: u8,
     encounter_type: u8,
 
-    pokeball_tentative: u8,
-
+    pokeball: u8,
     walking_pokemon_mood: u8,
 };
 
@@ -139,7 +155,7 @@ const Pokemon = struct {
 
 fn read(comptime T: type, cursor: *[]const u8) T {
     const size = @sizeOf(T);
-    const value = std.mem.readInt(T, cursor.*[0..size], .little);
+    const value = std.mem.readInt(T, cursor.*[0..size], builtin.cpu.arch.endian());
     cursor.* = cursor.*[size..];
     return value;
 }
@@ -153,106 +169,97 @@ const PokemonParty = struct {
     pub fn from_buffer(buffer: *[]const u8) PokemonParty {
         // skip(buffer, offset);
         const result: PokemonParty = .{ .party = undefined };
-        const pv = read(u32, buffer);
-        const flags = read(u16, buffer);
-        const checksum = read(u16, buffer);
+        for (0..2) |p| {
+            print("\nPokemon: {}\n", .{p});
+            const pv = read(u32, buffer);
+            const flags = read(u16, buffer);
+            const checksum = read(u16, buffer);
 
-        // const a = read(u32, buffer);
-        // const b = read(u32, buffer);
-        // const c = read(u32, buffer);
-        // const d = read(u32, buffer);
+            // const a = read(u32, buffer);
+            // const b = read(u32, buffer);
+            // const c = read(u32, buffer);
+            // const d = read(u32, buffer);
 
-        var seed: u32 = checksum;
-        var shuffled_data: [128]u8 = undefined;
-        std.debug.assert(buffer.len > 128);
-        // decrypted[1] = data[0] & data[1]
-        // decrypted then goes from 0 -> 64
-        const decrypted = std.mem.bytesAsSlice(u16, &shuffled_data);
+            var seed: u32 = checksum;
+            var shuffled_data: [128]u8 = undefined;
+            std.debug.assert(buffer.len > 128);
+            // decrypted[1] = data[0] & data[1]
+            // decrypted then goes from 0 -> 64
+            const decrypted = std.mem.bytesAsSlice(u16, &shuffled_data);
 
-        for (0..64) |i| {
-            // this will overflow, so we use zig wrapping methods to truncate to 32bit again
-            seed = 0x41C64E6D *% seed +% 0x00006073;
-            const key = @as(u16, @truncate(seed >> 16));
+            for (0..64) |i| {
+                // this will overflow, so we use zig wrapping methods to truncate to 32bit again
+                seed = 0x41C64E6D *% seed +% 0x00006073;
+                const key = @as(u16, @truncate(seed >> 16));
 
-            const encrypted = read(u16, buffer);
-            decrypted[i] = encrypted ^ key;
+                const encrypted = read(u16, buffer);
+                decrypted[i] = encrypted ^ key;
 
-            // std.mem.writeInt(u16, data[2 * i ..][0..2], decrypted, .little);
-        }
-
-        print("\npv: 0x{x:0>8}, checksum: 0x{x:0>4} | 0b{b:0>8}\n", .{ pv, checksum, flags });
-        const data = unshuffle(shuffled_data, pv);
-        var a: []const u8 = data[0..32];
-        // var b: []const u8 = data[32..64];
-        var c: []const u8 = data[64..96];
-        // var d: []const u8 = data[96..128];
-        const b_a = Block_A{
-            .sid = read(u16, &a),
-            .item = read(u16, &a),
-            .trainer_id = read(u16, &a),
-            .secret_id = read(u16, &a),
-            .exp = read(u32, &a),
-            .friendship = read(u8, &a),
-            .ability = read(u8, &a),
-            .mark = read(u8, &a),
-            .origin = read(u8, &a),
-            .ev = .{
-                .hp = read(u8, &a),
-                .att = read(u8, &a),
-                .def = read(u8, &a),
-                .speed = read(u8, &a),
-                .sp_att = read(u8, &a),
-                .sp_def = read(u8, &a),
-            },
-            .contest_stats = .{
-                .cool = read(u8, &a),
-                .beauty = read(u8, &a),
-                .cute = read(u8, &a),
-                .smart = read(u8, &a),
-                .tough = read(u8, &a),
-            },
-            .sheen = read(u8, &a),
-            .ribbons = read(u32, &a),
-        };
-        const nickname: [:0]u21 = blk: {
-            var name: [11]u21 = undefined;
-            inline for (0..11) |i| {
-                const code = read(u16, &c);
-                name[i] = hex_table.hex_to_letter(code);
-                if (code == 0xFFFF) {
-                    name[i] = 0;
-                    break :blk name[0..i :0];
-                }
+                // std.mem.writeInt(u16, data[2 * i ..][0..2], decrypted, .little);
             }
-            break :blk name[0.. :0];
-        };
 
-        // comptime is fun
-        print("Block_A: \n", .{});
-        const fields = @typeInfo(@TypeOf(b_a)).@"struct".fields;
-        inline for (fields) |field| {
-            const value = @field(b_a, field.name);
-            const ti = @typeInfo(@TypeOf(value));
-            switch (ti) {
-                .@"struct" => {
-                    print("  {s}: [\n", .{field.name});
-                    defer print("  ]\n", .{});
-                    const nested_fields = ti.@"struct".fields;
-                    inline for (nested_fields) |nested_field| {
-                        const nested_value = @field(value, nested_field.name);
-                        print("    {s}: {any}\n", .{ nested_field.name, nested_value });
-                    }
-                },
-                else => print("  {s}: {any}\n", .{ field.name, value }),
-            }
+            print("\npv: 0x{x:0>8}, checksum: 0x{x:0>4} | 0b{b:0>8}\n", .{ pv, checksum, flags });
+            const data = unshuffle(shuffled_data, pv);
+
+            const data_a = data[0..32];
+            const data_b = data[32..64];
+            const data_c = data[64..96];
+            const data_d = data[96..128];
+
+            const a = std.mem.bytesAsValue(Block_A, data_a).*;
+            const b = std.mem.bytesAsValue(Block_B, data_b).*;
+            const c = std.mem.bytesAsValue(Block_C, data_c).*;
+            const d = std.mem.bytesAsValue(Block_D, data_d).*;
+            // var b: []const u8 = data[32..64];
+            // var c: []const u8 = data[64..96];
+            // const nickname: [:0]u21 = blk: {
+            //     var name: [11]u21 = undefined;
+            //     inline for (0..11) |i| {
+            //         const code = read(u16, &c);
+            //         name[i] = hex_table.hex_to_letter(code);
+            //         if (code == 0xFFFF) {
+            //             name[i] = 0;
+            //             break :blk name[0..i :0];
+            //         }
+            //     }
+            //     break :blk name[0.. :0];
+            // };
+            //
+
+            // comptime is fun
+
+            // print("\nNickname {u}\n", .{nickname});
+            print_block(a);
+            print_block(b);
+            print_block(c);
+            print_block(d);
         }
-        print(":Block_A \n", .{});
-
-        print("\nNickname {u}\n", .{nickname});
 
         return result;
     }
 };
+
+fn print_block(data: anytype) void {
+    const fields = @typeInfo(@TypeOf(data)).@"struct".fields;
+    print("{}: \n", .{@TypeOf(data)});
+    inline for (fields) |field| {
+        const value = @field(data, field.name);
+        const ti = @typeInfo(@TypeOf(value));
+        switch (ti) {
+            .@"struct" => {
+                print("  {s}: [\n", .{field.name});
+                defer print("  ]\n", .{});
+                const nested_fields = ti.@"struct".fields;
+                inline for (nested_fields) |nested_field| {
+                    const nested_value = @field(value, nested_field.name);
+                    print("    {s}: {any}\n", .{ nested_field.name, nested_value });
+                }
+            },
+            else => print("  {s}: {any}\n", .{ field.name, value }),
+        }
+    }
+    print(":{} \n", .{@TypeOf(data)});
+}
 
 fn unshuffle(data: [128]u8, pv: u32) [128]u8 {
     const shift = ((pv & 0x3E000) >> 0xD) % 24;
