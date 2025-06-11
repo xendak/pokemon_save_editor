@@ -21,10 +21,10 @@ const expect = std.testing.expectEqual;
 
 const EVs = packed struct {
     hp: u8,
-    att: u8,
+    atk: u8,
     def: u8,
     speed: u8,
-    sp_att: u8,
+    sp_atk: u8,
     sp_def: u8,
 };
 
@@ -52,16 +52,6 @@ const Block_A = packed struct {
     // Contest Score Modifier
     sheen: u8,
     ribbons: u32,
-
-    // Helper function for safe conversion
-    pub fn fromBytes(bytes: *const [32]u8) Block_A {
-        return @as(*const Block_A, @ptrCast(bytes)).*;
-    }
-
-    // Helper to convert back to bytes
-    pub fn toBytes(self: *const Block_A) [32]u8 {
-        return @as(*const [32]u8, @ptrCast(self)).*;
-    }
 };
 
 const PokemonMoves = packed struct {
@@ -70,7 +60,25 @@ const PokemonMoves = packed struct {
     move_3: u8,
     move_4: u8,
 };
-const IVs = struct {};
+const IVs = struct {
+    hp: u8,
+    atk: u8,
+    def: u8,
+    speed: u8,
+    sp_atk: u8,
+    sp_def: u8,
+
+    pub fn init_iv(packed_iv: u32) IVs {
+        return IVs{
+            .hp = @truncate(packed_iv << 0),
+            .atk = @truncate(packed_iv << 5),
+            .def = @truncate(packed_iv << 10),
+            .speed = @truncate(packed_iv << 15),
+            .sp_atk = @truncate(packed_iv << 20),
+            .sp_def = @truncate(packed_iv << 25),
+        };
+    }
+};
 
 const Block_B = packed struct {
     // moves: [4]PokemonMoves,
@@ -132,10 +140,10 @@ const BattleStats = struct {
     seals: u8,
     hp: u16,
     max_hp: u16,
-    att: u16,
+    atk: u16,
     def: u16,
     speed: u16,
-    sp_att: u16,
+    sp_atk: u16,
     sp_def: u16,
 
     mail: [56]u8,
@@ -168,9 +176,10 @@ const PokemonParty = struct {
 
     pub fn from_buffer(buffer: *[]const u8) PokemonParty {
         // skip(buffer, offset);
+        const pokemon_count = 4;
+        const pokemon_to_print = 1;
         const result: PokemonParty = .{ .party = undefined };
-        for (0..2) |p| {
-            print("\nPokemon: {}\n", .{p});
+        for (0..pokemon_count) |p| {
             const pv = read(u32, buffer);
             const flags = read(u16, buffer);
             const checksum = read(u16, buffer);
@@ -210,34 +219,38 @@ const PokemonParty = struct {
             const b = std.mem.bytesAsValue(Block_B, data_b).*;
             const c = std.mem.bytesAsValue(Block_C, data_c).*;
             const d = std.mem.bytesAsValue(Block_D, data_d).*;
-            // var b: []const u8 = data[32..64];
-            // var c: []const u8 = data[64..96];
-            // const nickname: [:0]u21 = blk: {
-            //     var name: [11]u21 = undefined;
-            //     inline for (0..11) |i| {
-            //         const code = read(u16, &c);
-            //         name[i] = hex_table.hex_to_letter(code);
-            //         if (code == 0xFFFF) {
-            //             name[i] = 0;
-            //             break :blk name[0..i :0];
-            //         }
-            //     }
-            //     break :blk name[0.. :0];
-            // };
-            //
 
-            // comptime is fun
-
-            // print("\nNickname {u}\n", .{nickname});
-            print_block(a);
-            print_block(b);
-            print_block(c);
-            print_block(d);
+            if (p == pokemon_to_print) {
+                print("\nPokemon: {}\n", .{p});
+                print_block(a);
+                print_block(b);
+                print_block(c);
+                print_block(d);
+                const iv: IVs = IVs.init_iv(b.iv);
+                print("IV: {any}", .{iv});
+                print_name(c.nickname, "Nickname");
+                print_name(d.trainer_name, "OT");
+            }
         }
 
         return result;
     }
 };
+
+fn print_vector_field(comptime T: type, instance: T, comptime field_name: []const u8, description: []const u8) void {}
+
+fn print_name(code: anytype, description: []const u8) void {
+    var name: @Vector(30, u21) = [_]u21{0} * 30;
+    for (code, 0..) |letter, idx| {
+        if (letter == 0xFFFF) {
+            name[idx] = 0;
+            break;
+        }
+        name[idx] = hex_table.hex_to_letter(letter);
+    }
+
+    print("{}: {u}", .{ description, name });
+}
 
 fn print_block(data: anytype) void {
     const fields = @typeInfo(@TypeOf(data)).@"struct".fields;
